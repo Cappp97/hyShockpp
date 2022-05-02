@@ -1,2 +1,2 @@
 # hyShockpp
-A python program for the chemeistry relazation analysis, in high-temperature post-shock conditions.
+A python program for the chemistry relaxation analysis, in high-temperature post-shock conditions.
