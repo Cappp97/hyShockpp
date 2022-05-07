@@ -147,7 +147,7 @@ import matplotlib.pyplot as plt
 plt.ylim((1e-4,4))
 plt.semilogy(x,Yis)
 plt.legend([mix.speciesName(i) for i in range(mix.nSpecies())])
-plt.show()
+
 
 fig = plt.figure()
 ax = fig.add_subplot(111)

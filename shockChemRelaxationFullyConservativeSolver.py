@@ -4,6 +4,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 import math as mt
+import matplotlib.pyplot as plt
 
 print('Succesfully imported shared libraries')
 
@@ -13,7 +14,7 @@ T_inf = 247.02  # freestream temperature [K]
 P_inf = 21.96  # freestream pressure [Pa]
 
 # MIXTURE
-opts = mpp.MixtureOptions("air_11_omar")
+opts = mpp.MixtureOptions("air_11")
 opts.setStateModel("ChemNonEq1T")
 opts.setThermodynamicDatabase("RRHO")
 mix = mpp.Mixture(opts)
@@ -144,7 +145,7 @@ for i in range(1,len(x)) :
     hs.append(mix.mixtureHMass())
 
 
-import matplotlib.pyplot as plt
+
 
 
 plt.ylim((1e-6,4))
