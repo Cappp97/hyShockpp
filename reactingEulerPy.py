@@ -30,7 +30,7 @@ h               = Length/(Nx-1)                                             # Ce
 meshPoints  = 0.5*(x[0:-1] + x[1:])                                         # Control Points of the cells
 
 # Time Discretization
-dt              = 1e-7                                                      # Time step
+dt              = 1e-11                                                      # Time step
 Nt              = 1000                                                      # Number of time iterations
 
 t = (0., dt*Nt)
@@ -94,7 +94,7 @@ def DOF_HANDLER(cellIdx, specieIdx, nSpecies, nEnergyEqs, var):
 
 
 Patm            = 1.01325e5
-P0              = lambda xx: 2*Patm if (xx > 0.03 or xx < 0.06) else Patm                  # Pressure
+P0              = lambda xx: 2*Patm if (xx > 0.03 and xx < 0.06) else Patm                  # Pressure
 T0              = lambda xx: 300.                                                           # Temperature
 u0              = 0.                                                                        # Velocity
 solution        = np.zeros((2 + mix.nEnergyEqns() + mix.nSpecies()) * len(meshPoints))
@@ -122,16 +122,17 @@ for i in range(len(x)-1):
     Energy_idx          = DOF_HANDLER(i, 0, mix.nSpecies(), mix.nEnergyEqns(), 'Energy')
 
 
-    solution[Rho_idx]       = quad(rho, x[i], x[i + 1])[0] / h
-    solution[Momentum_idx]  = quad(momentum, x[i], x[i + 1])[0] / h
-    solution[Energy_idx]    = quad(rhoEt, x[i], x[i + 1])[0] / h
+    solution[Rho_idx]       = mix.density()
+    solution[Momentum_idx]  = 0
+    solution[Energy_idx]    = mix.density()*mix.mixtureEnergyMass()
     
     for j in range(mix.nSpecies()):
         Rhos_idx            = DOF_HANDLER(i, j, mix.nSpecies(), mix.nEnergyEqns(), 'Specie')
         dens                = lambda xx: rhos[j]
-        solution[Rhos_idx]  = quad(dens, x[i], x[i + 1])[0] / h
+        solution[Rhos_idx]  = mix.densities()[j]
 
 del rho, rhos, momentum, rhoEt, dens, Rhos_idx, Rho_idx, Energy_idx, Momentum_idx, totalEnergy, i, j
+
 
 # =============================================== Time integration =================================================== #
 
@@ -181,8 +182,8 @@ def dwdt(t, solution):
         Ys          = mix.Y()
         R           = 8.31446261815324                                              # Universal Gas Constant
         Ri          = [R / mix.speciesMw(k) for k in range(mix.nSpecies())]         # Species Gas Constants
-        dP_dRho     = sum([Ys[i] * Ri[i] * T for k in range(mix.nSpecies())])       # Derivative of pressure wrt density
-        dP_dT       = rho * sum([Ys[i] * Ri[i] for k in range(mix.nSpecies())])     # Derivative of pressure wrt energy
+        dP_dRho     = sum([Ys[k] * Ri[k] * T for k in range(mix.nSpecies())])       # Derivative of pressure wrt density
+        dP_dE       = (mix.mixtureFrozenGamma()-1)*rhocap                           # Derivative of pressure wrt energy
 
         # Compute terms inside Roe's matrix -- Notation: fij = df_i/dw_j, i & j = 0, .. , nVar-1
         # First row
@@ -200,7 +201,7 @@ def dwdt(t, solution):
         # Third row
         f20         = -(rhocap*ucap*rhocap*etotcap)/rhocap**2 + (rhocap*ucap/rhocap)*(dP_dRho - P/rhocap**2)
         f21         = rhocap*etotcap/rhocap + P/rhocap
-        f22         = 0.
+        f22         = ucap*(1+dP_dE)
         f23         = 0.    # This is only for TTv model
 
         # Fourth row  --    This is only for TTv model
@@ -225,17 +226,17 @@ def dwdt(t, solution):
 
             fij     = np.concatenate((fij,rowj))
 
-        fij = np.reshape( fij, (mix.nSpecies,nVar))
+        fij = np.reshape( fij, (mix.nSpecies(),nVar))
 
         if (mix.nEnergyEqns() == 1):
-            A0      = np.hstack([f00, f01, f02], f0123j)
-            A1      = np.hstack([f10, f11, f12], f0123j)
-            A2      = np.hstack([f20, f21, f22], f0123j)
+            A0      = np.hstack([[f00, f01, f02], f0123j])
+            A1      = np.hstack([[f10, f11, f12], f0123j])
+            A2      = np.hstack([[f20, f21, f22], f0123j])
             A       = np.block([[A0], [A1], [A2], [fij]])
         else:
-            A0      = np.hstack([f00, f01, f02, f03], f0123j)
-            A1      = np.hstack([f10, f11, f12, f13], f0123j)
-            A2      = np.hstack([f20, f21, f22, f23], f0123j)
+            A0      = np.hstack([[f00, f01, f02, f03], f0123j])
+            A1      = np.hstack([[f10, f11, f12, f13], f0123j])
+            A2      = np.hstack([[f20, f21, f22, f23], f0123j])
             A3      = np.zeros((1,nVar))
             A       = np.block([[A0], [A1], [A2], [A3], [fij]])
 
@@ -251,7 +252,8 @@ def dwdt(t, solution):
             fL2     = rhou_prev*rhoet_prev/rho_prev + P*rhou_prev/rho_prev
             fL3     = rhos_prev*rhou_prev/rho_prev
 
-            fL      = np.concatenate((fL0, fL1, fL2, fL3))
+
+            fL      = np.hstack([[fL0, fL1, fL2], fL3])
 
             # Right fluxes
             fR0     = rhou
@@ -259,7 +261,7 @@ def dwdt(t, solution):
             fR2     = rhou * rhoet / rho + P * rhou / rho
             fR3     = rhos * rhou / rho
 
-            fR      = np.concatenate((fR0, fR1, fR2, fR3))
+            fR      = np.hstack([[fR0, fR1, fR2], fR3])
 
             # Total Flux at previous interface
             variable_prev   = solution[nVar*iPrev:nVar*(iPrev+1)]
@@ -276,8 +278,8 @@ def dwdt(t, solution):
 
 
     # ------------------------------- Computation of the RHS of the semi-discrete formulation ------------------------ #
+    fluxes_prev = np.hstack([fluxes_prev,fluxes_prev[0]])
     fluxes = -fluxes_prev[0:-1] + fluxes_prev[1:]
-
     dw = ws_integrated - fluxes/h
     return dw
 
@@ -286,7 +288,7 @@ sol = solve_ivp(dwdt, t, solution, method='RK23', t_eval=np.linspace(t[0], t[1],
 
 import matplotlib.pyplot as plt
 
-plt.plot(sol.t, sol.y[0, :])
+plt.plot(meshPoints, np.round(sol.y[0:-1:3+mix.nSpecies(), -1],3))
 plt.show()
 print(mix.T(), mix.P())
 
