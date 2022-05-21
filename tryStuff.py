@@ -5,9 +5,6 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 import math as mt
 
-print(abs(-10))
-a = -3*np.ones(3)
-print(np.abs(a))
 
 # MIXTURE
 opts = mpp.MixtureOptions("air_5")
@@ -20,8 +17,14 @@ T0 = 300
 T0v = 300
 
 mix.equilibrate(T0, P0)
+dens = mix.densities()
+en = mix.mixtureEnergyMass()*mix.density()
+mix.setState(dens, en, 5
+             )
 
-print(mix.mixtureHMass())
+print(mix.Tv())
+
+print(mix.energyTransferSource())
 
 ht = mix.mixtureEnergyMass() + mix.P()/mix.density()
 print(ht)
