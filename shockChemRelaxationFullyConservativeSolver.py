@@ -91,7 +91,7 @@ eps = {9}
 x = np.linspace(0,5E-3,10000)
 dx = x[1]-x[0]
 
-def rk_jumpYi(state,*args) :
+def RH_jumpYi(state,*args) :
     global dx
     u0,T0,P0,h0,rho0,wi0 = args[0] #old variables
     Yi0 = args[1]
@@ -134,7 +134,7 @@ for i in range(1,len(x)) :
             mix) #argument list
 
     state = [us[i-1],Ts[i-1],Ps[i-1],*(Yis[i-1]+wi*dx/(rhos[i-1]*us[i-1]))] #initial guess
-    sol = fsolve(rk_jumpYi,state,args,xtol = 1e-12)
+    sol = fsolve(RH_jumpYi,state,args,xtol = 1e-12)
     us.append(sol[0])
     Ts.append(sol[1])
     Ps.append(sol[2])

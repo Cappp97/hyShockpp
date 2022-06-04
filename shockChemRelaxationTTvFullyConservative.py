@@ -1,5 +1,6 @@
 import mutationpp as mpp
 import numpy as np
+
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 import math as mt
@@ -8,9 +9,11 @@ import matplotlib.pyplot as plt
 print('Succesfully imported shared libraries')
 
 # PRESHOCK CONDITIONS
-M_inf = 10# freestream mach number
+M_inf = 16# freestream mach number
 T_inf = 247.02  # freestream temperature [K]
 P_inf = 21.96  # freestream pressure [Pa]
+
+
 
 # MIXTURE
 opts = mpp.MixtureOptions("air_11")
@@ -23,11 +26,13 @@ print('Succesfully initialized required mixture')
 # EQUILIBRIUM CONDTIONS
 mix.equilibrate(T_inf, P_inf)  # set the mixture in chemical equilibrium before the shock
 rho_inf = mix.density()  # freestream density [kg/m^3]
+print("The freestream density is {}".format(rho_inf))
 c_inf = mix.equilibriumSoundSpeed()  # sound speed
 u_inf = M_inf * mix.equilibriumSoundSpeed()  # air speed
 gamma = mix.mixtureEquilibriumGamma()  # specific heat ratio
 h_inf = mix.mixtureHMass()  # enthalpy
 Yi = mix.Y()  # mass ratios
+ev_inf = mix.mixtureEnergies()[1]
 print('Initial conditions computed')
 
 # SUITABLE FIRST GUESS FOR THE POST SHOCK STATE
@@ -42,55 +47,61 @@ T_0 = P_0 / (rho_0 * 287)
 # any other set of variables can be used, these are not the conserved variables) Returns the residual of the RK jump
 # condtion at a given state The nonlinear solver will try to set the residual to zero
 def rk_jump(state):
-    global u_inf, rho_inf, h_inf, mix, Yi  # global variables
+    global u_inf, rho_inf, h_inf, ev_inf, mix, Yi  # global variables
 
-    u, T, P = state  # current state
+    u, T, Tv, P = state  # current state
 
     # This piece of code is necessary to avoid unphysical conditions therefore avoiding stability and convergence issues
     # If the solver ends up in an unphyscal state the code immediatly returns a very high value
     err_value = 1e+17
-    if P < 0 or T < 0 or u < 0:
-        return [err_value, err_value, err_value]
+    if P < 0 or T < 0 or u < 0 or Tv < 0:
+        return [err_value, err_value, err_value, err_value]
 
     # Set the current mixture state
     # because we are using frozen chemistry, the concentrations will be fixed
     # Note: Mixture is not in chemical equilibrium
-    mix.setState(Yi, [P, T], 2)
+    mix.setState(Yi, [P, T, Tv], 2)
 
     # get conserved variables
     rho = mix.density()
     h = mix.mixtureHMass()
+    ev = mix.mixtureEnergies()[1]
 
     # Rankine Hugoniot jump conditions
     eq1 = u_inf * rho_inf - rho * u
     eq2 = P_inf + rho_inf * u_inf ** 2 - P - rho * u ** 2
     eq3 = h_inf + 0.5 * u_inf ** 2 - h - 0.5 * u ** 2
-    return [eq1, eq2, eq3]
+    eq4 = rho_inf * u_inf * ev_inf - rho * u * ev
+    return [eq1, eq2, eq3, eq4]
+
 
 
 # Frozen chemistry solution
 print('Solving the frozen chemistry shock model')
-solution = fsolve(rk_jump, np.array([u_0, T_0, P_0]))
+solution = fsolve(rk_jump, np.array([u_0, T_0, T_inf, P_0]))
 err = np.linalg.norm(rk_jump(solution), 2)  # L2 norm of the residual
-init_to_print = np.round([u_inf, T_inf, P_inf], 2)
+init_to_print = np.round([u_inf, T_inf, T_inf, P_inf], 2)
 sol_to_print = np.round(solution, 2)
-const_to_print = np.round([u_0, T_0, P_0], 2)
+const_to_print = np.round([u_0, T_0, T_inf, P_0], 2)
 
 print('''
 NONLINEAR SHOCK SOLVER SOLUTION
 INITIAL CONDITION            SOLUTION               CONSTANT CP SOLUTION
-U = {0} [m/s]               U = {3} [m/s]           U = {6} [m/S]            
-T = {1} [K]                 T = {4} [K]             T = {7} [K]
-P = {2} [Pa]                P = {5} [Pa]            P = {8} [Pa]
+U = {0} [m/s]               U = {4} [m/s]           U = {8} [m/S]            
+T = {1} [K]                 T = {5} [K]             T = {9} [K]
+Tv = {2} [K]                 Tv = {6} [K]             Tv = {10} [K]
+P = {3} [Pa]                P = {7} [Pa]            P = {11} [Pa]
 ERROR
-eps = {9}
+eps = {12}
 '''.format(*init_to_print, *sol_to_print, *const_to_print, err))
 
 
 # MESH
-Nx = 10000
-x = np.linspace(0,0.1,Nx)
+Nx = 50000
+x = np.linspace(0,1e-1,Nx)
 dx = x[1]-x[0]
+
+print(dx)
 
 def rk_jumpYi(state,*args) :
     global dx
@@ -108,7 +119,7 @@ def rk_jumpYi(state,*args) :
     OmegaV = air.energyTransferSource()
     h = air.mixtureHMass()
     rho = air.density()
-    ev =air.mixtureEnergies()[1]
+    ev = air.mixtureEnergies()[1]
 
     eq1 = rho*u - rho0*u0
     eq2 = P0+rho0*u0*u0-P-rho*u*u
@@ -121,11 +132,11 @@ def rk_jumpYi(state,*args) :
 
 us = [solution[0]]
 Ts = [solution[1]]
-Tvs = [solution[1]]
-Ps = [solution[2]]
+Tvs = [solution[2]]
+Ps = [solution[3]]
 rhos = [mix.density()]
 hs = [mix.mixtureHMass()]
-evs = [mix.mixtureEnergies()[1]]
+evs = [ev_inf]
 Yis = [Yi]
 mix = mpp.Mixture(opts)
 mix.equilibrate(P_inf,T_inf)
@@ -155,6 +166,7 @@ for i in range(1,len(x)) :
     rhos.append(mix.density())
     hs.append(mix.mixtureHMass())
     evs.append(mix.mixtureEnergies()[1])
+
 
 
 plt.figure(1)
@@ -194,5 +206,5 @@ plt.plot(x,us,'k-',lw=2)
 plt.title("Velocity")
 plt.xlabel("x [m]")
 plt.ylabel(r'$u [m/s]$')
-plt.show()
 
+plt.show()
