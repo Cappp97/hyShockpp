@@ -1,4 +1,4 @@
-# IMPORT LIBRARIES
+# ============================================= IMPORT USEFUL LIBRARIES ============================================== #
 import mutationpp as mpp
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -7,66 +7,115 @@ import math as mt
 import matplotlib.pyplot as plt
 
 
-print('Succesfully imported shared libraries')
+print('Successfully imported shared libraries')
+# ==================================================================================================================== #
 
-# PRESHOCK CONDITIONS
-M_inf = 16 # freestream mach number
-T_inf = 247.02  # freestream temperature [K]
-P_inf = 21.96  # freestream pressure [Pa]
+# ======================================== CASE STORING IN A DICTIONARY ============================================== #
+#                                                                                                                      #
+#                               Case options: air_1, air_2, air_3, mars_1, mars_2                                      #
+#                               CaseData = { key: (M_inf, T_inf, P_inf, DomainEnd, Nx)}                                #
+#                                                                                                                      #
 
-# MIXTURES
-opts1T = mpp.MixtureOptions("air_11")
+Case = 'mars_2'
+
+Mixtures = {'air_1': "air_11",
+            'air_2': "air_11",
+            'air_3': "air_11",
+            'mars_1': "Mars_19",
+            'mars_2': "Mars_19",
+            }
+
+CaseData = {'air_1': (13.2, 268, 61.54, 1e-1, 10000),
+            'air_2': (19.2, 239, 19.2780, 1e-1, 100000),
+            'air_3': (26.2, 227, 9.9044, 1e-1, 10000),
+            'mars_1': (23.58, 172.05, 29.95, 1e-1, 50000),
+            'mars_2': (13.2, 241.15, 638.83, 5e-4, 50000)}
+
+# ==================================================================================================================== #
+
+
+# ================================================= SETTING THE CASE ================================================= #
+data = CaseData[Case]
+
+# --------------------------------------------- Pre-Shock Conditions ------------------------------------------------- #
+M_inf = data[0]                     # freestream mach number
+T_inf = data[1]                     # freestream temperature [K]
+P_inf = data[2]                     # freestream pressure [Pa]
+
+# ----------------------------------------------------- Mesh --------------------------------------------------------- #
+x = np.linspace(0, data[3], data[4])
+dx = x[1]-x[0]
+
+# ==================================================================================================================== #
+
+
+
+# =============================================== SETTING THE MIXTURE ================================================ #
+
+# ---------------------------------------------- One Temperature Model ----------------------------------------------- #
+opts1T = mpp.MixtureOptions(Mixtures[Case])
 opts1T.setStateModel("ChemNonEq1T")
 opts1T.setThermodynamicDatabase("RRHO")
 mix1T = mpp.Mixture(opts1T)
 
-optsTTv = mpp.MixtureOptions("air_11")
+# ---------------------------------------------- Two Temperature Model ----------------------------------------------- #
+optsTTv = mpp.MixtureOptions(Mixtures[Case])
 optsTTv.setStateModel("ChemNonEqTTv")
 optsTTv.setThermodynamicDatabase("RRHO")
 mixTTv = mpp.Mixture(optsTTv)
 
-
 print('Successfully initialized required mixture')
 
-# EQUILIBRIUM CONDITIONS 1T
-mix1T.equilibrate(T_inf, P_inf)  # set the mixture in chemical equilibrium before the shock
-rho_inf = mix1T.density()  # freestream density [kg/m^3]
+# ==================================================================================================================== #
+
+
+
+# ===================================== COMPUTE THE POST-SHOCK CONDITIONS - 1T ======================================= #
+
+# --------------------------------------------- Equilibrium Conditions ----------------------------------------------- #
+mix1T.equilibrate(T_inf, P_inf)                     # set the mixture in chemical equilibrium before the shock
+rho_inf = mix1T.density()                           # freestream density [kg/m^3]
 print("The freestream density is {}".format(rho_inf))
-c_inf = mix1T.equilibriumSoundSpeed()  # sound speed
-u_inf = M_inf * mix1T.equilibriumSoundSpeed()  # air speed
-gamma = mix1T.mixtureEquilibriumGamma()  # specific heat ratio
-h_inf = mix1T.mixtureHMass()  # enthalpy
-Yi = mix1T.Y()  # mass ratios
+c_inf = mix1T.equilibriumSoundSpeed()               # sound speed
+u_inf = M_inf * mix1T.equilibriumSoundSpeed()       # air speed
+gamma = mix1T.mixtureEquilibriumGamma()             # specific heat ratio
+h_inf = mix1T.mixtureHMass()                        # enthalpy
+Yi = mix1T.Y()                                      # mass ratios
+
 print('Initial conditions computed')
 
-# SUITABLE FIRST GUESS FOR THE POST SHOCK STATE
-# a suitable post shock state can be found from the Rankine Hugonit jump conditions for a politropic ideal std. air mixture
+
+# -------------------------------- First Guess from polytropic ideal std. air mixture -------------------------------- #
 P_0 = ((2 * gamma / (gamma + 1)) * (M_inf ** 2 - 1) + 1) * P_inf
 rho_0 = rho_inf * (1 - (2 / (gamma + 1)) * (1 - (1 / M_inf ** 2))) ** (-1)
 u_0 = u_inf - (2 * c_inf / (gamma + 1)) * (M_inf - (1 / M_inf))
 T_0 = P_0 / (rho_0 * 287)
 
 
-# NONLINEAR SOLVER FOR THE RANKINE HUGONIOT JUMP CONDITIONS RK JUMP The state vector are the variables u, T, P (Note,
-# any other set of variables can be used, these are not the conserved variables) Returns the residual of the RK jump
-# condtion at a given state The nonlinear solver will try to set the residual to zero
+# -----------------------------------  Non-Linear Solver for RH jump conditions -------------------------------------- #
+# The state vector is composed by the variables u, T, P                                                                #
+# (Note: any other set of variables can be used, these are not the conserved variables)                                #
+# Returns the residual of the RH jump condition at a given state.                                                      #
+# The nonlinear solver will try to set the residual to zero.                                                           #
+
 def RH_jump1T(state):
-    global u_inf, rho_inf, h_inf, mix1T, Yi  # global variables
+    global u_inf, rho_inf, h_inf, mix1T, Yi     # global variables
 
-    u, T, P = state  # current state
+    u, T, P = state                             # current state
 
-    # This piece of code is necessary to avoid unphysical conditions therefore avoiding stability and convergence issues
-    # If the solver ends up in an unphysical state the code immediately returns a very high value
+    # This piece of code is necessary to avoid unphysical conditions, i.e. avoiding stability and convergence issues.
+    # If the solver ends up in an unphysical state, the code immediately returns a very high value.
+
     err_value = 1e+17
     if P < 0 or T < 0 or u < 0:
         return [err_value, err_value, err_value]
 
-    # Set the current mixture state
-    # because we are using frozen chemistry, the concentrations will be fixed
-    # Note: Mixture is not in chemical equilibrium
+    # Set the current mixture state.
+    # because we are using frozen chemistry, the concentrations will be fixed.
+    # Note: Mixture is not in chemical equilibrium.
     mix1T.setState(Yi, [P, T], 2)
 
-    # get conserved variables
+    # Get conserved variables
     rho = mix1T.density()
     h = mix1T.mixtureHMass()
 
@@ -76,7 +125,7 @@ def RH_jump1T(state):
     eq3 = h_inf + 0.5 * u_inf ** 2 - h - 0.5 * u ** 2
     return [eq1, eq2, eq3]
 
-# Frozen chemistry solution
+# ------------------------------------ Frozen-chemistry Rankine-Hugoniot solution ------------------------------------ #
 print('Solving the frozen chemistry shock model')
 solution1T = fsolve(RH_jump1T, np.array([u_0, T_0, P_0]))
 err = np.linalg.norm(RH_jump1T(solution1T), 2)  # L2 norm of the residual
@@ -93,48 +142,53 @@ P = {2} [Pa]                P = {5} [Pa]            P = {8} [Pa]
 ERROR
 eps = {9}
 '''.format(*init_to_print, *sol_to_print, *const_to_print, err))
+# ==================================================================================================================== #
 
 
-# EQUILIBRIUM CONDTIONS
-mixTTv.equilibrate(T_inf, P_inf)  # set the mixture in chemical equilibrium before the shock
-rho_inf = mixTTv.density()  # freestream density [kg/m^3]
+# ===================================== COMPUTE THE POST-SHOCK CONDITIONS - 2T ======================================= #
+
+# --------------------------------------------- Equilibrium Conditions ----------------------------------------------- #
+mixTTv.equilibrate(T_inf, P_inf)                    # set the mixture in chemical equilibrium before the shock
+rho_inf = mixTTv.density()                          # freestream density [kg/m^3]
 print("The freestream density is {}".format(rho_inf))
-c_inf = mixTTv.equilibriumSoundSpeed()  # sound speed
-u_inf = M_inf * mixTTv.equilibriumSoundSpeed()  # air speed
-gamma = mixTTv.mixtureEquilibriumGamma()  # specific heat ratio
-h_inf = mixTTv.mixtureHMass()  # enthalpy
-Yi = mixTTv.Y()  # mass ratios
+c_inf = mixTTv.equilibriumSoundSpeed()              # sound speed
+u_inf = M_inf * mixTTv.equilibriumSoundSpeed()      # air speed
+gamma = mixTTv.mixtureEquilibriumGamma()            # specific heat ratio
+h_inf = mixTTv.mixtureHMass()                       # enthalpy
+Yi = mixTTv.Y()                                     # mass ratios
 ev_inf = mixTTv.mixtureEnergies()[1]
 print('Initial conditions computed')
 
-# SUITABLE FIRST GUESS FOR THE POST SHOCK STATE
-# a suitable post shock state can be found from the Rankine Hugonit jump conditions for a politropic ideal std. air mixture
+# -------------------------------- First Guess from polytropic ideal std. air mixture -------------------------------- #
 P_0 = ((2 * gamma / (gamma + 1)) * (M_inf ** 2 - 1) + 1) * P_inf
 rho_0 = rho_inf * (1 - (2 / (gamma + 1)) * (1 - (1 / M_inf ** 2))) ** (-1)
 u_0 = u_inf - (2 * c_inf / (gamma + 1)) * (M_inf - (1 / M_inf))
 T_0 = P_0 / (rho_0 * 287)
 
 
-# NONLINEAR SOLVER FOR THE RANKINE HUGONIOT JUMP CONDITIONS RK JUMP The state vector are the variables u, T, P (Note,
-# any other set of variables can be used, these are not the conserved variables) Returns the residual of the RK jump
-# condtion at a given state The nonlinear solver will try to set the residual to zero
+# -----------------------------------  Non-Linear Solver for RH jump conditions -------------------------------------- #
+# The state vector is composed by the variables u, T, Tv, P                                                            #
+# (Note: any other set of variables can be used, these are not the conserved variables)                                #
+# Returns the residual of the RH jump condition at a given state.                                                      #
+# The nonlinear solver will try to set the residual to zero.                                                           #
+
 def RH_jumpTTv(state):
-    global u_inf, rho_inf, h_inf, ev_inf, mixTTv, Yi  # global variables
+    global u_inf, rho_inf, h_inf, ev_inf, mixTTv, Yi    # global variables
 
-    u, T, Tv, P = state  # current state
+    u, T, Tv, P = state                                 # current state
 
-    # This piece of code is necessary to avoid unphysical conditions therefore avoiding stability and convergence issues
-    # If the solver ends up in an unphysical state the code immediately returns a very high value
+    # This piece of code is necessary to avoid unphysical conditions, i.e. avoiding stability and convergence issues.
+    # If the solver ends up in an unphysical state, the code immediately returns a very high value.
     err_value = 1e+17
     if P < 0 or T < 0 or u < 0 or Tv < 0:
         return [err_value, err_value, err_value, err_value]
 
-    # Set the current mixture state
-    # because we are using frozen chemistry, the concentrations will be fixed
-    # Note: Mixture is not in chemical equilibrium
+    # Set the current mixture state.
+    # because we are using frozen chemistry, the concentrations will be fixed.
+    # Note: Mixture is not in chemical equilibrium.
     mixTTv.setState(Yi, [P, T, Tv], 2)
 
-    # get conserved variables
+    # Get conserved variables
     rho = mixTTv.density()
     h = mixTTv.mixtureHMass()
     ev = mixTTv.mixtureEnergies()[1]
@@ -147,8 +201,7 @@ def RH_jumpTTv(state):
     return [eq1, eq2, eq3, eq4]
 
 
-
-# Frozen chemistry solution
+# ------------------------------------ Frozen-chemistry Rankine-Hugoniot solution ------------------------------------ #
 print('Solving the frozen chemistry shock model')
 solutionTTv = fsolve(RH_jumpTTv, np.array([u_0, T_0, T_inf, P_0]))
 err = np.linalg.norm(RH_jumpTTv(solutionTTv), 2)  # L2 norm of the residual
@@ -166,24 +219,23 @@ P = {3} [Pa]                P = {7} [Pa]            P = {11} [Pa]
 ERROR
 eps = {12}
 '''.format(*init_to_print, *sol_to_print, *const_to_print, err))
+# ==================================================================================================================== #
 
 
-# MESH
-x = np.linspace(0,1e-1,50000)
-dx = x[1]-x[0]
 
-def RH_jumpYi_1T(state,*args) :
+# ======================================= COMPUTE THE NEW STATE VECTOR - 1T ========================================== #
+def RH_jumpYi_1T(state, *args) :
     global dx
-    u0,T0,P0,h0,rho0,wi0 = args[0] #old variables
+    u0, T0, P0, h0, rho0, wi0 = args[0]     #old variables
     Yi0 = args[1]
 
-    air = args[2] #mixture
+    air = args[2]                           #mixture
 
     state = np.array(state)
-    u,T,P = state[0:3] #current state variables
+    u, T, P = state[0:3]                    #current state variables
     Yi = state[3:]
 
-    air.setState(Yi,[P,T],2)
+    air.setState(Yi, [P, T], 2)
     wi = air.netProductionRates()
     h = air.mixtureHMass()
     rho = air.density()
@@ -192,21 +244,22 @@ def RH_jumpYi_1T(state,*args) :
     eq2 = P0+rho0*u0*u0-P-rho*u*u
     eq3 = h0 + 0.5*u0*u0 - h - 0.5*u*u
     eqs = rho0*Yi0*u0 - rho*Yi*u + 0.5*dx*(wi0+wi)
-    return [eq1,eq2,eq3,*eqs]
+    return [eq1, eq2, eq3, *eqs]
 
 
+# ======================================= COMPUTE THE NEW STATE VECTOR - 2T ========================================== #
 def RH_jumpYi_TTv(state,*args) :
     global dx
-    u0, T0, T0v, P0, h0, ev0, rho0, wi0, OmegaV0 = args[0] #old variables
+    u0, T0, T0v, P0, h0, ev0, rho0, wi0, OmegaV0 = args[0]  #old variables
     Yi0 = args[1]
 
     air = args[2] #mixture
 
     state = np.array(state)
-    u,T,Tv,P = state[0:4] #current state variables
+    u, T, Tv, P = state[0:4]                                   #current state variables
     Yi = state[4:]
 
-    air.setState(Yi,[P,T,Tv],2)
+    air.setState(Yi, [P, T, Tv], 2)
     wi = air.netProductionRates()
     OmegaV = air.energyTransferSource()
     h = air.mixtureHMass()
@@ -219,13 +272,13 @@ def RH_jumpYi_TTv(state,*args) :
     eq4 = rho0 * u0 * ev0 - rho * u * ev + 0.5*dx*(OmegaV0 + OmegaV)
     eqs = rho0*Yi0*u0 - rho*Yi*u + 0.5*dx*(wi0+wi)
 
-    return [eq1,eq2,eq3,eq4,*eqs]
+    return [eq1, eq2, eq3, eq4, *eqs]
+
+# ==================================================================================================================== #
 
 
 
-
-
-# Solution 1T case
+# ================================================= Solution 1T case ================================================= #
 us1T = [solution1T[0]]
 Ts1T = [solution1T[1]]
 Ps1T = [solution1T[2]]
@@ -233,33 +286,41 @@ rhos1T = [mix1T.density()]
 hs1T = [mix1T.mixtureHMass()]
 Yis1T = [Yi]
 mix1T = mpp.Mixture(opts1T)
-mix1T.equilibrate(P_inf,T_inf)
+mix1T.equilibrate(P_inf, T_inf)
 
 for i in range(1,len(x)) :
-    print("Section {0} out of {1} sum of densities {2}".format(i,len(x),np.sum(Yis1T[i-1])))
-    #OLD MIXTURE
-    mix1T.setState(Yis1T[i-1],[Ps1T[i-1],Ts1T[i-1]],2)
+    print("Section {0} out of {1} sum of densities {2}".format(i, len(x), np.sum(Yis1T[i-1])))
+    # ------------------------------------------------ Old Mixture --------------------------------------------------- #
+    mix1T.setState(Yis1T[i-1], [Ps1T[i-1], Ts1T[i-1]], 2)
 
-    #COMPUTE PRODUCTION RATES
+    # --------------------------------------- Compute the production rates ------------------------------------------- #
     wi = mix1T.netProductionRates()
-    args = ([us1T[i-1],Ts1T[i-1],Ps1T[i-1],hs1T[i-1],rhos1T[i-1],wi],
-            Yis1T[i-1],
-            mix1T) #argument list
 
-    state = [us1T[i-1],Ts1T[i-1],Ps1T[i-1],*(Yis1T[i-1]+wi*dx/(rhos1T[i-1]*us1T[i-1]))] #initial guess
-    sol1T = fsolve(RH_jumpYi_1T,state,args,xtol = 1e-12)
+    # ----------------------------------------- Set new arguments list ----------------------------------------------- #
+    args = ([us1T[i-1], Ts1T[i-1], Ps1T[i-1], hs1T[i-1], rhos1T[i-1], wi],
+            Yis1T[i-1],
+            mix1T)
+
+    # --------------------------------------------- Set initial guess ------------------------------------------------ #
+    state = [us1T[i-1], Ts1T[i-1], Ps1T[i-1], *(Yis1T[i-1]+wi*dx/(rhos1T[i-1]*us1T[i-1]))]
+
+    # -------------------------------------------- Solve for new state ----------------------------------------------- #
+    sol1T = fsolve(RH_jumpYi_1T, state, args, xtol=1e-12)
+
+    # -------------------------------------------- Store new solution ------------------------------------------------ #
     us1T.append(sol1T[0])
     Ts1T.append(sol1T[1])
     Ps1T.append(sol1T[2])
     Yis1T.append(sol1T[3:])
 
-    mix1T.setState(Yis1T[i],[Ps1T[i],Ts1T[i]],2)
+    mix1T.setState(Yis1T[i], [Ps1T[i], Ts1T[i]], 2)
     rhos1T.append(mix1T.density())
     hs1T.append(mix1T.mixtureHMass())
 
 
+Yis1T = np.array(Yis1T)
 
-# Solution TTv case
+# ================================================= Solution 2T case ================================================= #
 usTTv = [solutionTTv[0]]
 TsTTv = [solutionTTv[1]]
 TvsTTv = [solutionTTv[2]]
@@ -269,111 +330,154 @@ hsTTv = [mixTTv.mixtureHMass()]
 evsTTv = [ev_inf]
 YisTTv = [Yi]
 mixTTv = mpp.Mixture(optsTTv)
-mixTTv.equilibrate(P_inf,T_inf)
+mixTTv.equilibrate(P_inf, T_inf)
 
 
 for i in range(1,len(x)) :
     print("Section {0} out of {1} sum of densities {2}".format(i,len(x),np.sum(YisTTv[i-1])))
-    #OLD MIXTURE
-    mixTTv.setState(YisTTv[i-1],[PsTTv[i-1],TsTTv[i-1], TvsTTv[i-1]], 2)
+    # ------------------------------------------------ Old Mixture --------------------------------------------------- #
+    mixTTv.setState(YisTTv[i-1], [PsTTv[i-1], TsTTv[i-1], TvsTTv[i-1]], 2)
 
-    #COMPUTE PRODUCTION RATES
+    # --------------------------------------- Compute the production rates ------------------------------------------- #
     wi = mixTTv.netProductionRates()
     OmegaV = mixTTv.energyTransferSource()
-    args = ([usTTv[i-1],TsTTv[i-1], TvsTTv[i-1],PsTTv[i-1],hsTTv[i-1], evsTTv[i-1],rhosTTv[i-1],wi, OmegaV],
-            YisTTv[i-1],
-            mixTTv) #argument list
 
-    state = [usTTv[i-1], TsTTv[i-1], TvsTTv[i-1], PsTTv[i-1], *(YisTTv[i-1]+wi*dx/(rhosTTv[i-1]*usTTv[i-1]))] #initial guess
-    solTTv = fsolve(RH_jumpYi_TTv,state,args,xtol = 1e-12)
+    # ----------------------------------------- Set new arguments list ----------------------------------------------- #
+    args = ([usTTv[i-1], TsTTv[i-1], TvsTTv[i-1], PsTTv[i-1], hsTTv[i-1], evsTTv[i-1], rhosTTv[i-1], wi, OmegaV],
+            YisTTv[i-1],
+            mixTTv)
+
+    # --------------------------------------------- Set initial guess ------------------------------------------------ #
+    state = [usTTv[i-1], TsTTv[i-1], TvsTTv[i-1], PsTTv[i-1], *(YisTTv[i-1]+wi*dx/(rhosTTv[i-1]*usTTv[i-1]))]
+
+    # -------------------------------------------- Solve for new state ----------------------------------------------- #
+    solTTv = fsolve(RH_jumpYi_TTv, state, args, xtol=1e-12)
+
+    # -------------------------------------------- Store new solution ------------------------------------------------ #
     usTTv.append(solTTv[0])
     TsTTv.append(solTTv[1])
     TvsTTv.append(solTTv[2])
     PsTTv.append(solTTv[3])
     YisTTv.append(solTTv[4:])
 
-    mixTTv.setState(YisTTv[i],[PsTTv[i],TsTTv[i],TvsTTv[i]],2)
+    mixTTv.setState(YisTTv[i], [PsTTv[i], TsTTv[i], TvsTTv[i]], 2)
     rhosTTv.append(mixTTv.density())
     hsTTv.append(mixTTv.mixtureHMass())
     evsTTv.append(mixTTv.mixtureEnergies()[1])
 
+YisTTv = np.array(YisTTv)
+# ==================================================================================================================== #
 
-# ===========================  Plots ==============================#
+
+
+# ====================================================== Plots ======================================================= #
+#
+# ---------------------------------------------------- PLOT LEGEND --------------------------------------------------- #
+#
+#                                           - 1 Temperature Model plots:
+#                                                   1. Linestyle:   '--'
+#                                                   2. Color:      red i.e. 'r'
+#
+#                                           - 2 Temperatures Model plots:
+#                                                  1. Linestyle:   '-'
+#                                                  2. Color        blue i.e. 'b'
+#
+# -------------------------------------------------------------------------------------------------------------------- #
+
+# ----------------------------------------------- Species Colors ----------------------------------------------------- #
+SpeciesColors = {'O2': (255, 0, 0), 'N2': (0, 255, 0), 'NO': (0, 0, 255), 'O': (238, 130, 238),
+                 'N': (255, 128, 0), 'N+': (128, 0, 0), 'O+': (0, 238, 238), 'NO+': (240, 255, 255),
+                 'N2+': (205, 205, 0), 'O2+': (85, 26, 139), 'e-': (0, 0, 0), 'CO2': (25, 25, 112),
+                 'CO': (51, 161, 201), 'CN': (105, 139, 34), 'C2': (199, 21, 133), 'C': (139, 69, 0),
+                 'CO+': (61, 145, 64), 'CN+': (233, 150, 122), 'C+': (255, 193, 37)}
 
 
 # --------------------------------------------------- Density -------------------------------------------------------- #
 plt.figure(1)
-plt.plot(x,rhos1T,'k-',lw=2)
-plt.plot(x,rhosTTv,'g-',lw=2)
-plt.title("Density")
-plt.xlabel("x [m]")
-plt.ylabel(r'$\rho [kg/m^3]$')
+plt.plot(x, rhos1T, 'r--', lw=2, label='1T')
+plt.plot(x, rhosTTv, 'b-', lw=2, label='TTv')
+plt.title("Density", fontsize=18)
+plt.xlabel("x [m]", fontsize=18)
+plt.ylabel(r'$\rho   [kg/m^3]$', fontsize=18)
 # Show the major grid lines with dark grey lines
 plt.grid(b=True, which='major', color='#666666', linestyle='--')
 
 # Show the minor grid lines with very faint and almost transparent grey lines
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
+plt.legend()
 
 # ------------------------------------------------ Temperatures ------------------------------------------------------ #
 plt.figure(2)
-plt.plot(x,Ts1T,'k-',lw=2)
-plt.plot(x,TsTTv,'r-',lw=2)
-plt.plot(x,TvsTTv, 'r--', lw=2)
-plt.title("Temperature")
-plt.xlabel("x [m]")
-plt.ylabel(r'$T [K]$')
+plt.plot(x, Ts1T, 'r--', lw=2, label='One T model')
+plt.plot(x, TsTTv, 'b-', lw=2, label='Two T model - Trt')
+plt.plot(x, TvsTTv, 'c-', lw=2, label='Two T model - Tv')
+plt.title("Temperature", fontsize=18)
+plt.xlabel("x [m]", fontsize=18)
+plt.ylabel(r'$T [K]$', fontsize=18)
 # Show the major grid lines with dark grey lines
 plt.grid(b=True, which='major', color='#666666', linestyle='--')
 
 # Show the minor grid lines with very faint and almost transparent grey lines
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
+plt.legend()
 
 # -------------------------------------------------- Velocity -------------------------------------------------------- #
 plt.figure(3)
-plt.plot(x,us1T,'k-',lw=2)
-plt.plot(x,usTTv,'k-',lw=2)
-plt.title("Velocity")
-plt.xlabel("x [m]")
-plt.ylabel(r'$u [m/s]$')
+plt.plot(x, us1T, 'r--', lw=2, label='1T')
+plt.plot(x, usTTv, 'b-', lw=2, label='TTv')
+plt.title("Velocity", fontsize=18)
+plt.xlabel("x [m]", fontsize=18)
+plt.ylabel(r'$u [m/s]$', fontsize=18)
 # Show the major grid lines with dark grey lines
 plt.grid(b=True, which='major', color='#666666', linestyle='--')
 
 # Show the minor grid lines with very faint and almost transparent grey lines
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
+plt.legend()
 
 # --------------------------------------------------- Pressure ------------------------------------------------------- #
 plt.figure(4)
-plt.plot(x,Ps1T,'k-',lw=2)
-plt.plot(x,PsTTv,'r-',lw=2)
-plt.title("Pressure")
-plt.xlabel("x [m]")
-plt.ylabel(r'$P [Pa]$')
+plt.plot(x, Ps1T, 'r--', lw=2, label='1T')
+plt.plot(x, PsTTv, 'b-', lw=2, label='TTv')
+plt.title("Pressure", fontsize=18)
+plt.xlabel("x [m]", fontsize=18)
+plt.ylabel(r'$P [Pa]$', fontsize=18)
 # Show the major grid lines with dark grey lines
 plt.grid(b=True, which='major', color='#666666', linestyle='--')
 
 # Show the minor grid lines with very faint and almost transparent grey lines
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
+plt.legend()
 
 # --------------------------------------------------- Species -------------------------------------------------------- #
 plt.figure(5)
-plt.ylim((1e-6,4))
-plt.semilogy(x,Yis1T, '-')
-plt.semilogy(x, YisTTv, '--')
+plt.ylim((1e-6, 4))
+for i in range(mix1T.nSpecies()):
+
+    species = mix1T.speciesName(i)
+    RGB = SpeciesColors[species]
+    RGB = tuple(map(lambda t: round(t/255., 2), RGB))
+
+    plt.semilogy(x, Yis1T[:, i], '-', color=RGB, alpha=1.0,label=species)
+    plt.semilogy(x, YisTTv[:, i], '--', color=RGB, alpha=1.0)
+
 plt.grid()
-plt.legend([mix1T.speciesName(i) for i in range(mix1T.nSpecies())])
-plt.title("Species Mass Fractions")
-plt.xlabel("x [m]")
-plt.ylabel(r'$Y_i$ [-]')
+plt.title("Species Mass Fractions", fontsize=18)
+plt.xlabel("x [m]", fontsize=18)
+plt.ylabel(r'$Y_i$ [-]', fontsize=18)
 # Show the major grid lines with dark grey lines
 plt.grid(b=True, which='major', color='#666666', linestyle='--')
 
 # Show the minor grid lines with very faint and almost transparent grey lines
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
+plt.legend()
 
 plt.show()
+
+# ==================================================================================================================== #
 

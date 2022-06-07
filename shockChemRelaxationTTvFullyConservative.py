@@ -9,10 +9,9 @@ import matplotlib.pyplot as plt
 print('Succesfully imported shared libraries')
 
 # PRESHOCK CONDITIONS
-M_inf = 16# freestream mach number
-T_inf = 247.02  # freestream temperature [K]
-P_inf = 21.96  # freestream pressure [Pa]
-
+M_inf = 19.2                   # freestream mach number
+T_inf = 239                    # freestream temperature [K]
+P_inf = 19.2780                # freestream pressure [Pa]
 
 
 # MIXTURE
@@ -23,7 +22,7 @@ mix = mpp.Mixture(opts)
 
 print('Succesfully initialized required mixture')
 
-# EQUILIBRIUM CONDTIONS
+# EQUILIBRIUM CONDITIONS
 mix.equilibrate(T_inf, P_inf)  # set the mixture in chemical equilibrium before the shock
 rho_inf = mix.density()  # freestream density [kg/m^3]
 print("The freestream density is {}".format(rho_inf))
@@ -97,8 +96,8 @@ eps = {12}
 
 
 # MESH
-Nx = 50000
-x = np.linspace(0,1e-1,Nx)
+Nx = 100
+x = np.linspace(0,7e-2,Nx)
 dx = x[1]-x[0]
 
 print(dx)
@@ -197,13 +196,13 @@ plt.ylabel(r'$T [K]$')
 plt.figure(4)
 plt.plot(x,Ps,'k-',lw=2)
 plt.title("Pressure")
-plt.xlabel("x [m]")
+plt.xlabel("x [m]", fontsize=18)
 plt.ylabel(r'$P [Pa]$')
 
 
 plt.figure(5)
 plt.plot(x,us,'k-',lw=2)
-plt.title("Velocity")
+plt.title("Velocity", fontsize=20)
 plt.xlabel("x [m]")
 plt.ylabel(r'$u [m/s]$')
 
