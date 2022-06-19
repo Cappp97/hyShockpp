@@ -16,21 +16,40 @@ print('Successfully imported shared libraries')
 #                               CaseData = { key: (M_inf, T_inf, P_inf, DomainEnd, Nx)}                                #
 #                                                                                                                      #
 
-Case = 'mars_2'
+Case = 'air11_1'
+NumberCase = "CASE2"
 
-Mixtures = {'air_1': "air_11",
-            'air_2': "air_11",
-            'air_3': "air_11",
+Folder  = {'air11_1': "AIR",
+           'air11_2': "AIR",
+           'air11_3': "AIR",
+           'air5_1' : "AIR",
+           'air5_2' : "AIR",
+           'air5_3' : "AIR",
+           'mars_1': "AIR",
+           'mars_2': "AIR",
+          }
+
+Mixtures = {'air11_1': "air_11",
+            'air11_2': "air_11",
+            'air11_3': "air_11",
+            'air5_1' : "air_5",
+            'air5_2' : "air_5",
+            'air5_3' : "air_5",
             'mars_1': "Mars_19",
             'mars_2': "Mars_19",
             }
 
-CaseData = {'air_1': (13.2, 268, 61.54, 1e-1, 10000),
-            'air_2': (19.2, 239, 19.2780, 1e-1, 100000),
-            'air_3': (26.2, 227, 9.9044, 1e-1, 10000),
+CaseData = {'air11_1': (13.2, 268, 61.54, 4e-1, 30000),
+            'air11_2': (19.2, 239, 19.2780, 1e-1, 100000),
+            'air11_3': (26.2, 227, 9.9044, 1e-1, 500000),
+            'air5_1': (13.2, 268, 61.54, 1e-1, 10000),
+            'air5_2': (19.2, 239, 19.2780, 1e-1, 100000),
+            'air5_3': (26.2, 227, 9.9044, 1e-1, 500000),
             'mars_1': (23.58, 172.05, 29.95, 1e-1, 50000),
             'mars_2': (13.2, 241.15, 638.83, 5e-4, 50000)}
 
+filename1T = "DATA/{:}/{:}/{:}"
+filenameTTv = "DATA/{:}/{:}/{:}"
 # ==================================================================================================================== #
 
 
@@ -65,6 +84,12 @@ optsTTv.setThermodynamicDatabase("RRHO")
 mixTTv = mpp.Mixture(optsTTv)
 
 print('Successfully initialized required mixture')
+
+# ---------------------------------------------- One Temperature Model ----------------------------------------------- #
+optsEq = mpp.MixtureOptions(Mixtures[Case])
+optsEq.setStateModel("ChemNonEq1T")
+optsEq.setThermodynamicDatabase("RRHO")
+mixEq = mpp.Mixture(optsEq)
 
 # ==================================================================================================================== #
 
@@ -274,8 +299,29 @@ def RH_jumpYi_TTv(state,*args) :
 
     return [eq1, eq2, eq3, eq4, *eqs]
 
-# ==================================================================================================================== #
+# Equilibrium
+def RH_jumpYi_Eq(state,*args) :
+    global u_inf,T_inf,P_inf,h_inf,rho_inf
 
+    air = args[0]                           #mixture
+
+    u, T, P = state                    #current state variables
+
+    err_value = 1e+17
+    if P < 0 or T < 0 or u < 0:
+        return [err_value, err_value, err_value]
+
+
+    air.equilibrate(T,P)
+    h = air.mixtureHMass()
+    rho = air.density()
+
+
+    eq1 = rho*u - rho_inf*u_inf
+    eq2 = P_inf+rho_inf*u_inf*u_inf-P-rho*u*u
+    eq3 = h_inf + 0.5*u_inf*u_inf - h - 0.5*u*u
+    return [eq1, eq2, eq3]
+# ==================================================================================================================== #
 
 
 # ================================================= Solution 1T case ================================================= #
@@ -319,6 +365,44 @@ for i in range(1,len(x)) :
 
 
 Yis1T = np.array(Yis1T)
+rhos1T = np.array(rhos1T)
+Ps1T = np.array(Ps1T)
+us1T = np.array(us1T)
+Ts1T = np.array(Ts1T)
+
+"""Yis1T_tosave = np.array2string(Yis1T, precision=64, separator=',')
+rhos1T_tosave = np.array2string(rhos1T, precision=64, separator=',')
+us1T_tosave = np.array2string(us1T, precision=64, separator=',')
+Ts1T_tosave = np.array2string(Ts1T, precision=64, separator=',')
+Ps1T_tosave = np.array2string(Ps1T, precision=64, separator=',')
+
+# Save temperature 1T
+f = open(filename1T.format(Folder[Case], NumberCase, "Temperature1T.txt"), "w")
+f.write(Ts1T_tosave)
+f.write("\n")
+f.close()
+# Save total density 1T
+f = open(filename1T.format(Folder[Case], NumberCase, "Density1T.txt"), "w")
+f.write(rhos1T_tosave)
+f.write("\n")
+f.close()
+# Save pressure 1T
+f = open(filename1T.format(Folder[Case], NumberCase, "Pressure1T.txt"), "w")
+f.write(Ps1T_tosave)
+f.write("\n")
+f.close()
+# Save Velocity
+f = open(filename1T.format(Folder[Case], NumberCase, "Velocity1T.txt"), "w")
+f.write(us1T_tosave)
+f.write("\n")
+f.close()
+# Save Species
+f = open(filename1T.format(Folder[Case], NumberCase, "Species1T.txt"), "w")
+f.write(Yis1T_tosave)
+f.write("\n")
+f.close()"""
+
+
 
 # ================================================= Solution 2T case ================================================= #
 usTTv = [solutionTTv[0]]
@@ -366,7 +450,50 @@ for i in range(1,len(x)) :
     evsTTv.append(mixTTv.mixtureEnergies()[1])
 
 YisTTv = np.array(YisTTv)
+rhosTTv = np.array(rhosTTv)
+PsTTv = np.array(PsTTv)
+usTTv = np.array(usTTv)
+TsTTv = np.array(TsTTv)
+
+"""YisTTv_tosave = np.array2string(YisTTv, precision=64, separator=',')
+rhosTTv_tosave = np.array2string(rhosTTv, precision=64, separator=',')
+usTTv_tosave = np.array2string(usTTv, precision=64, separator=',')
+TsTTv_tosave = np.array2string(TsTTv, precision=64, separator=',')
+PsTTv_tosave = np.array2string(PsTTv, precision=64, separator=',')
+
+# Save temperature 1T
+f = open(filenameTTv.format(Folder[Case], NumberCase, "TemperatureTTv.txt"), "w")
+f.write(Ts1T_tosave)
+f.write("\n")
+f.close()
+# Save total density 1T
+f = open(filenameTTv.format(Folder[Case], NumberCase, "DensityTTv.txt"), "w")
+f.write(rhos1T_tosave)
+f.write("\n")
+f.close()
+# Save pressure 1T
+f = open(filenameTTv.format(Folder[Case], NumberCase, "PressureTTv.txt"), "w")
+f.write(Ps1T_tosave)
+f.write("\n")
+f.close()
+# Save Velocity
+f = open(filenameTTv.format(Folder[Case], NumberCase, "VelocityTTv.txt"), "w")
+f.write(us1T_tosave)
+f.write("\n")
+f.close()
+# Save Species
+f = open(filenameTTv.format(Folder[Case], NumberCase, "SpeciesTTv.txt"), "w")
+f.write(Yis1T_tosave)
+f.write("\n")
+f.close()"""
+
 # ==================================================================================================================== #
+x0 = np.array([us1T[-1],Ts1T[-1],Ps1T[-1]])
+solEq = fsolve(RH_jumpYi_Eq,x0,mixEq)
+uEq,Teq,Peq = solEq
+mixEq.equilibrate(Teq, Peq)
+rhoEq = mixEq.density()
+
 
 
 
@@ -396,6 +523,7 @@ SpeciesColors = {'O2': (255, 0, 0), 'N2': (0, 255, 0), 'NO': (0, 0, 255), 'O': (
 plt.figure(1)
 plt.plot(x, rhos1T, 'r--', lw=2, label='1T')
 plt.plot(x, rhosTTv, 'b-', lw=2, label='TTv')
+plt.plot([x[0],x[-1]],[rhoEq,rhoEq],'g--',lw=2,label='Thermochemical Equilibrium')
 plt.title("Density", fontsize=18)
 plt.xlabel("x [m]", fontsize=18)
 plt.ylabel(r'$\rho   [kg/m^3]$', fontsize=18)
@@ -412,6 +540,7 @@ plt.figure(2)
 plt.plot(x, Ts1T, 'r--', lw=2, label='One T model')
 plt.plot(x, TsTTv, 'b-', lw=2, label='Two T model - Trt')
 plt.plot(x, TvsTTv, 'c-', lw=2, label='Two T model - Tv')
+plt.plot([x[0],x[-1]],[Teq,Teq],'g--',lw=2,label='Thermochemical Equilibrium')
 plt.title("Temperature", fontsize=18)
 plt.xlabel("x [m]", fontsize=18)
 plt.ylabel(r'$T [K]$', fontsize=18)
@@ -427,6 +556,7 @@ plt.legend()
 plt.figure(3)
 plt.plot(x, us1T, 'r--', lw=2, label='1T')
 plt.plot(x, usTTv, 'b-', lw=2, label='TTv')
+plt.plot([x[0],x[-1]],[uEq,uEq],'g--',lw=2,label='Thermochemical Equilibrium')
 plt.title("Velocity", fontsize=18)
 plt.xlabel("x [m]", fontsize=18)
 plt.ylabel(r'$u [m/s]$', fontsize=18)
@@ -442,6 +572,7 @@ plt.legend()
 plt.figure(4)
 plt.plot(x, Ps1T, 'r--', lw=2, label='1T')
 plt.plot(x, PsTTv, 'b-', lw=2, label='TTv')
+plt.plot([x[0],x[-1]],[Peq,Peq],'g--',lw=2,label='Thermochemical Equilibrium')
 plt.title("Pressure", fontsize=18)
 plt.xlabel("x [m]", fontsize=18)
 plt.ylabel(r'$P [Pa]$', fontsize=18)
@@ -475,7 +606,7 @@ plt.grid(b=True, which='major', color='#666666', linestyle='--')
 # Show the minor grid lines with very faint and almost transparent grey lines
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
-plt.legend()
+plt.legend(loc='best')
 
 plt.show()
 

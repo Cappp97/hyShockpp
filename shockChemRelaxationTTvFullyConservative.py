@@ -96,7 +96,7 @@ eps = {12}
 
 
 # MESH
-Nx = 100
+Nx = 10000
 x = np.linspace(0,7e-2,Nx)
 dx = x[1]-x[0]
 
@@ -169,13 +169,15 @@ for i in range(1,len(x)) :
 
 
 plt.figure(1)
-plt.ylim((1e-6,4))
-plt.semilogy(x,Yis)
-plt.grid()
-plt.legend([mix.speciesName(i) for i in range(mix.nSpecies())])
+ax = plt.subplot(111)
+ax.set_ylim((1e-6,4))
+ax.semilogy(x,Yis)
+ax.grid()
+
 plt.title("Species Mass Fractions")
-plt.xlabel("x [m]")
-plt.ylabel(r'$Y_i$ [-]')
+ax.set_xlabel("x [m]")
+ax.set_ylabel(r'$Y_i$ [-]')
+ax.legend([mix.speciesName(i) for i in range(mix.nSpecies())], bbox_to_anchor=(0., 0.5), loc='center right', borderaxespad=0.)
 
 
 plt.figure(2)
@@ -201,9 +203,11 @@ plt.ylabel(r'$P [Pa]$')
 
 
 plt.figure(5)
-plt.plot(x,us,'k-',lw=2)
+ax = plt.subplot(111)
+ax.plot(x,us,'k-',lw=2)
 plt.title("Velocity", fontsize=20)
-plt.xlabel("x [m]")
-plt.ylabel(r'$u [m/s]$')
+ax.set_xlabel("x [m]")
+ax.set_xlabel(r'$u [m/s]$')
+ax.legend(bbox_to_anchor=(1, 1), loc='upper right', borderaxespad=0.)
 
 plt.show()
