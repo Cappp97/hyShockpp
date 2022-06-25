@@ -9,13 +9,12 @@ import matplotlib.pyplot as plt
 print('Succesfully imported shared libraries')
 
 # PRESHOCK CONDITIONS
-M_inf = 19.2                   # freestream mach number
-T_inf = 239                    # freestream temperature [K]
-P_inf = 19.2780                # freestream pressure [Pa]
-
+M_inf = 23.58                   # freestream mach number
+T_inf = 172.05                    # freestream temperature [K]
+P_inf = 29.95               # freestream pressure [Pa]
 
 # MIXTURE
-opts = mpp.MixtureOptions("air_11")
+opts = mpp.MixtureOptions("Mars_19")
 opts.setStateModel("ChemNonEqTTv")
 opts.setThermodynamicDatabase("RRHO")
 mix = mpp.Mixture(opts)
@@ -167,6 +166,8 @@ for i in range(1,len(x)) :
     evs.append(mix.mixtureEnergies()[1])
 
 
+print(mix.averageHeavyCollisionFreq())
+print(mix.meanFreePath())
 
 plt.figure(1)
 ax = plt.subplot(111)

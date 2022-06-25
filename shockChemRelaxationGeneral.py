@@ -16,17 +16,17 @@ print('Successfully imported shared libraries')
 #                               CaseData = { key: (M_inf, T_inf, P_inf, DomainEnd, Nx)}                                #
 #                                                                                                                      #
 
-Case = 'air11_1'
-NumberCase = "CASE2"
+Case = 'mars_1'
+NumberCase = "CASE1"
 
-Folder  = {'air11_1': "AIR",
-           'air11_2': "AIR",
-           'air11_3': "AIR",
-           'air5_1' : "AIR",
-           'air5_2' : "AIR",
-           'air5_3' : "AIR",
-           'mars_1': "AIR",
-           'mars_2': "AIR",
+Folder  = {'air11_1': "AIR11",
+           'air11_2': "AIR11",
+           'air11_3': "AIR11",
+           'air5_1' : "AIR5",
+           'air5_2' : "AIR5",
+           'air5_3' : "AIR5",
+           'mars_1': "MARS",
+           'mars_2': "MARS",
           }
 
 Mixtures = {'air11_1': "air_11",
@@ -35,21 +35,22 @@ Mixtures = {'air11_1': "air_11",
             'air5_1' : "air_5",
             'air5_2' : "air_5",
             'air5_3' : "air_5",
-            'mars_1': "Mars_19",
+            'mars_1': "Mars_19Omar",
             'mars_2': "Mars_19",
             }
 
 CaseData = {'air11_1': (13.2, 268, 61.54, 4e-1, 30000),
             'air11_2': (19.2, 239, 19.2780, 1e-1, 100000),
             'air11_3': (26.2, 227, 9.9044, 1e-1, 500000),
-            'air5_1': (13.2, 268, 61.54, 1e-1, 10000),
+            'air5_1': (13.2, 268, 61.54, 1e-1, 1000),
             'air5_2': (19.2, 239, 19.2780, 1e-1, 100000),
             'air5_3': (26.2, 227, 9.9044, 1e-1, 500000),
-            'mars_1': (23.58, 172.05, 29.95, 1e-1, 50000),
-            'mars_2': (13.2, 241.15, 638.83, 5e-4, 50000)}
+            'mars_1': (23.58, 172.05, 29.95, 7e-2, 20000),
+            'mars_2': (23.58, 241.15, 638.83, 1e-3, 20000)}
 
 filename1T = "DATA/{:}/{:}/{:}"
 filenameTTv = "DATA/{:}/{:}/{:}"
+plotSaveStr = "/home/omarkahol/POLIMI/HYPERSONIC_FLOWS/hyShockpp/PLOTS/"+Folder[Case]+"/"+NumberCase+"/"
 # ==================================================================================================================== #
 
 
@@ -416,7 +417,6 @@ YisTTv = [Yi]
 mixTTv = mpp.Mixture(optsTTv)
 mixTTv.equilibrate(P_inf, T_inf)
 
-
 for i in range(1,len(x)) :
     print("Section {0} out of {1} sum of densities {2}".format(i,len(x),np.sum(YisTTv[i-1])))
     # ------------------------------------------------ Old Mixture --------------------------------------------------- #
@@ -520,7 +520,7 @@ SpeciesColors = {'O2': (255, 0, 0), 'N2': (0, 255, 0), 'NO': (0, 0, 255), 'O': (
 
 
 # --------------------------------------------------- Density -------------------------------------------------------- #
-plt.figure(1)
+plt.figure(1, figsize=(8,6))
 plt.plot(x, rhos1T, 'r--', lw=2, label='1T')
 plt.plot(x, rhosTTv, 'b-', lw=2, label='TTv')
 plt.plot([x[0],x[-1]],[rhoEq,rhoEq],'g--',lw=2,label='Thermochemical Equilibrium')
@@ -534,9 +534,10 @@ plt.grid(b=True, which='major', color='#666666', linestyle='--')
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
 plt.legend()
+plt.savefig(plotSaveStr+"Density.eps")
 
 # ------------------------------------------------ Temperatures ------------------------------------------------------ #
-plt.figure(2)
+plt.figure(2, figsize=(8,6))
 plt.plot(x, Ts1T, 'r--', lw=2, label='One T model')
 plt.plot(x, TsTTv, 'b-', lw=2, label='Two T model - Trt')
 plt.plot(x, TvsTTv, 'c-', lw=2, label='Two T model - Tv')
@@ -551,9 +552,9 @@ plt.grid(b=True, which='major', color='#666666', linestyle='--')
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
 plt.legend()
-
+plt.savefig(plotSaveStr+"Temperatures.eps")
 # -------------------------------------------------- Velocity -------------------------------------------------------- #
-plt.figure(3)
+plt.figure(3, figsize=(8,6))
 plt.plot(x, us1T, 'r--', lw=2, label='1T')
 plt.plot(x, usTTv, 'b-', lw=2, label='TTv')
 plt.plot([x[0],x[-1]],[uEq,uEq],'g--',lw=2,label='Thermochemical Equilibrium')
@@ -567,9 +568,10 @@ plt.grid(b=True, which='major', color='#666666', linestyle='--')
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
 plt.legend()
+plt.savefig(plotSaveStr+"Velocity.eps")
 
 # --------------------------------------------------- Pressure ------------------------------------------------------- #
-plt.figure(4)
+plt.figure(4, figsize=(8,6))
 plt.plot(x, Ps1T, 'r--', lw=2, label='1T')
 plt.plot(x, PsTTv, 'b-', lw=2, label='TTv')
 plt.plot([x[0],x[-1]],[Peq,Peq],'g--',lw=2,label='Thermochemical Equilibrium')
@@ -583,9 +585,10 @@ plt.grid(b=True, which='major', color='#666666', linestyle='--')
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
 plt.legend()
+plt.savefig(plotSaveStr+"Pressure.eps")
 
 # --------------------------------------------------- Species -------------------------------------------------------- #
-plt.figure(5)
+plt.figure(5, figsize=(8,6))
 plt.ylim((1e-6, 4))
 for i in range(mix1T.nSpecies()):
 
@@ -607,8 +610,9 @@ plt.grid(b=True, which='major', color='#666666', linestyle='--')
 plt.minorticks_on()
 plt.grid(b=True, which='minor', color='#999999', linestyle='--', alpha=0.2)
 plt.legend(loc='best')
-
+plt.savefig(plotSaveStr+"Species.eps")
 plt.show()
 
 # ==================================================================================================================== #
 
+print(solEq)
